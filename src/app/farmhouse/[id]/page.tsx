@@ -2,11 +2,13 @@
 import { use, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import { farmhouses } from "@/lib/data";
-import { Star, MapPin, Users, Calendar, Wifi, Car, Flame, Trees, Snowflake, Gamepad2, Waves, Heart, Share2, ArrowLeft } from "lucide-react";
+import { Star, MapPin, Users, Calendar, Wifi, Car, Flame, Trees, Snowflake, Gamepad2, Waves, Heart, Share2, ArrowLeft, CheckCircle } from "lucide-react";
 
 const amenityIcons: Record<string, React.ReactNode> = {
   "Swimming Pool": <Waves size={18} />,
@@ -18,14 +20,25 @@ const amenityIcons: Record<string, React.ReactNode> = {
   "Games": <Gamepad2 size={18} />,
 };
 
+declare global {
+  interface Window {
+    Razorpay: new (options: Record<string, unknown>) => { open: () => void };
+  }
+}
+
 export default function FarmhouseDetails({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const farmhouse = farmhouses.find((f) => f.id === id);
+  const { data: session } = useSession();
+  const router = useRouter();
   const [selectedImage, setSelectedImage] = useState(0);
   const today = new Date().toISOString().split("T")[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
   const [checkIn, setCheckIn] = useState(today);
   const [checkOut, setCheckOut] = useState(tomorrow);
+  const [guests, setGuests] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [booked, setBooked] = useState(false);
   const fmtDate = (d: string) => { const [y, m, day] = d.split("-"); return `${day}/${m}/${y}`; };
 
   if (!farmhouse) {
@@ -39,12 +52,95 @@ export default function FarmhouseDetails({ params }: { params: Promise<{ id: str
     );
   }
 
+  const nights = Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000));
+  const totalAmount = farmhouse.price * nights;
+  const tokenAmount = Math.round(totalAmount * 0.1);
+  const balanceAmount = totalAmount - tokenAmount;
+
+  async function handleBooking() {
+    if (!session?.user) {
+      router.push("/login");
+      return;
+    }
+    setLoading(true);
+
+    // Load Razorpay script
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    document.body.appendChild(script);
+    await new Promise((r) => (script.onload = r));
+
+    // Create order
+    const res = await fetch("/api/booking/create-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ totalAmount, farmhouseId: id, checkIn, checkOut, guests }),
+    });
+
+    if (!res.ok) { setLoading(false); return; }
+    const data = await res.json();
+
+    // Open Razorpay checkout
+    const options = {
+      key: data.key,
+      amount: data.amount * 100,
+      currency: "INR",
+      name: "NearByFarmhouse",
+      description: `Token for ${farmhouse!.name}`,
+      order_id: data.orderId,
+      handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+        // Confirm booking
+        const confirmRes = await fetch("/api/booking/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...response,
+            farmhouseId: id,
+            checkIn,
+            checkOut,
+            guests,
+            totalAmount,
+          }),
+        });
+        if (confirmRes.ok) {
+          setBooked(true);
+        }
+        setLoading(false);
+      },
+      prefill: { name: session.user.name, email: session.user.email },
+      theme: { color: "#15803d" },
+      modal: { ondismiss: () => setLoading(false) },
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  }
+
+  if (booked) {
+    return (
+      <>
+        <Navbar />
+        <main className="pt-20 pb-16 min-h-screen flex items-center justify-center">
+          <div className="text-center space-y-4 max-w-md mx-auto px-4">
+            <CheckCircle size={64} className="mx-auto text-green-600" />
+            <h1 className="text-2xl font-bold">Booking Confirmed!</h1>
+            <p className="text-gray-500">You paid <span className="font-semibold text-green-700">₹{tokenAmount.toLocaleString()}</span> as token amount.</p>
+            <p className="text-gray-500">Remaining <span className="font-semibold">₹{balanceAmount.toLocaleString()}</span> to be paid at the farmhouse.</p>
+            <div className="pt-4 space-x-3">
+              <Link href="/dashboard" className="px-6 py-3 bg-green-700 text-white rounded-xl hover:bg-green-800 transition-colors inline-block">View Bookings</Link>
+              <Link href="/" className="px-6 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-green-900 transition-colors inline-block">Home</Link>
+            </div>
+          </div>
+        </main>
+      </>
+    );
+  }
+
   return (
     <>
       <Navbar />
       <main className="pt-20 pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Back + actions */}
           <div className="flex items-center justify-between mb-4">
             <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-green-700">
               <ArrowLeft size={16} /> Back
@@ -82,7 +178,6 @@ export default function FarmhouseDetails({ params }: { params: Promise<{ id: str
                 </div>
               </div>
 
-              {/* Badges */}
               <div className="flex gap-3">
                 <span className={`px-3 py-1.5 text-sm font-medium rounded-full ${farmhouse.withFood ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" : "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300"}`}>
                   {farmhouse.withFood ? "🍽 With Food" : "🚫 Without Food"}
@@ -92,13 +187,11 @@ export default function FarmhouseDetails({ params }: { params: Promise<{ id: str
                 </span>
               </div>
 
-              {/* Description */}
               <div>
                 <h2 className="text-lg font-semibold mb-2">About this farmhouse</h2>
                 <p className="text-gray-600 dark:text-gray-400 leading-relaxed">{farmhouse.description}</p>
               </div>
 
-              {/* Amenities */}
               <div>
                 <h2 className="text-lg font-semibold mb-4">Amenities</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -111,31 +204,21 @@ export default function FarmhouseDetails({ params }: { params: Promise<{ id: str
                 </div>
               </div>
 
-              {/* Owner */}
               <div className="flex items-center gap-4 p-4 rounded-2xl bg-beige-50 dark:bg-green-950 border border-beige-200 dark:border-green-800">
                 <Image src={farmhouse.owner.avatar} alt={farmhouse.owner.name} width={48} height={48} className="rounded-full" />
                 <div className="flex-1">
                   <p className="font-medium">{farmhouse.owner.name}</p>
                   <p className="text-sm text-gray-500">Property Owner</p>
                 </div>
-                <a
-                  href={`https://wa.me/${farmhouse.owner.phone.replace("+", "")}?text=Hi, I'm interested in ${farmhouse.name}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 text-sm bg-green-700 text-white rounded-full hover:bg-green-800 transition-colors"
-                >
-                  Contact
-                </a>
+                <a href={`https://wa.me/${farmhouse.owner.phone.replace("+", "")}?text=Hi, I'm interested in ${farmhouse.name}`} target="_blank" rel="noopener noreferrer" className="px-4 py-2 text-sm bg-green-700 text-white rounded-full hover:bg-green-800 transition-colors">Contact</a>
               </div>
 
-              {/* Map placeholder */}
               <div>
                 <h2 className="text-lg font-semibold mb-4">Location</h2>
                 <div className="h-64 rounded-2xl bg-gray-100 dark:bg-green-950 flex items-center justify-center border border-gray-200 dark:border-green-800">
                   <div className="text-center text-gray-400">
                     <MapPin size={32} className="mx-auto mb-2" />
                     <p className="text-sm">{farmhouse.location}</p>
-                    <p className="text-xs mt-1">Map integration coming soon</p>
                   </div>
                 </div>
               </div>
@@ -155,7 +238,7 @@ export default function FarmhouseDetails({ params }: { params: Promise<{ id: str
                   </div>
                 </div>
 
-                <form className="space-y-3" onSubmit={(e) => e.preventDefault()}>
+                <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-medium text-gray-500">Check-in</label>
@@ -177,31 +260,28 @@ export default function FarmhouseDetails({ params }: { params: Promise<{ id: str
 
                   <div>
                     <label className="text-xs font-medium text-gray-500">Guests</label>
-                    <select className="w-full mt-1 px-3 py-2 border border-gray-200 dark:border-green-800 rounded-xl bg-green-900 text-white text-sm outline-none focus:border-green-500">
+                    <select value={guests} onChange={(e) => setGuests(Number(e.target.value))} className="w-full mt-1 px-3 py-2 border border-gray-200 dark:border-green-800 rounded-xl bg-green-900 text-white text-sm outline-none focus:border-green-500">
                       {Array.from({ length: farmhouse.guests }, (_, i) => (
                         <option key={i + 1} value={i + 1}>{i + 1} guest{i > 0 ? "s" : ""}</option>
                       ))}
                     </select>
                   </div>
 
-                  <div>
-                    <label className="text-xs font-medium text-gray-500">Food option</label>
-                    <select className="w-full mt-1 px-3 py-2 border border-gray-200 dark:border-green-800 rounded-xl bg-green-900 text-white text-sm outline-none focus:border-green-500">
-                      <option>With Food (+₹500/person)</option>
-                      <option>Without Food</option>
-                    </select>
-                  </div>
-
                   <div className="border-t border-gray-100 dark:border-green-800 pt-3 space-y-2 text-sm">
-                    <div className="flex justify-between"><span className="text-gray-500">₹{farmhouse.price.toLocaleString()} × 1 night</span><span>₹{farmhouse.price.toLocaleString()}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Service fee</span><span>₹500</span></div>
-                    <div className="flex justify-between font-bold text-base pt-1 border-t border-gray-100 dark:border-green-800"><span>Total</span><span>₹{(farmhouse.price + 500).toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">₹{farmhouse.price.toLocaleString()} × {nights} night{nights > 1 ? "s" : ""}</span><span>₹{totalAmount.toLocaleString()}</span></div>
+                    <div className="flex justify-between font-bold text-base pt-1 border-t border-gray-100 dark:border-green-800"><span>Total</span><span>₹{totalAmount.toLocaleString()}</span></div>
                   </div>
 
-                  <button type="submit" className="w-full py-3 bg-green-700 text-white rounded-xl font-medium hover:bg-green-800 transition-colors">
-                    Reserve
+                  <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-xl space-y-1 text-sm">
+                    <div className="flex justify-between"><span className="text-green-700 dark:text-green-400">Pay now (10%)</span><span className="font-semibold text-green-700 dark:text-green-400">₹{tokenAmount.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-gray-500"><span>Pay at farmhouse</span><span>₹{balanceAmount.toLocaleString()}</span></div>
+                  </div>
+
+                  <button onClick={handleBooking} disabled={loading} className="w-full py-3 bg-green-700 text-white rounded-xl font-medium hover:bg-green-800 transition-colors disabled:opacity-50">
+                    {loading ? "Processing..." : `Pay ₹${tokenAmount.toLocaleString()} to Book`}
                   </button>
-                </form>
+                  <p className="text-xs text-center text-gray-400">Remaining ₹{balanceAmount.toLocaleString()} payable at farmhouse</p>
+                </div>
               </div>
             </div>
           </div>
