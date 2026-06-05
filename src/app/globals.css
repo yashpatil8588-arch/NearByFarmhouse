@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-beige-50: #fefcf8;
+  --color-beige-100: #fdf6e7;
+  --color-beige-200: #f9eacc;
+  --color-beige-300: #f4d9a7;
+  --color-beige-400: #edc47c;
+  --color-beige-500: #e5a94f;
+  --color-green-50: #f0f7f4;
+  --color-green-100: #dceee5;
+  --color-green-200: #b8ddca;
+  --color-green-300: #7ec4a3;
+  --color-green-400: #4aa87a;
+  --color-green-500: #2d8a5e;
+  --color-green-600: #1f6e4a;
+  --color-green-700: #19583c;
+  --color-green-800: #154631;
+  --color-green-900: #0f3524;
+  --color-green-950: #081e14;
+  --font-sans: var(--font-geist-sans);
+}
+
+:root {
+  --background: #000000;
+  --foreground: #ffffff;
+}
+
+.dark {
+  --background: #0f1a14;
+  --foreground: #f5f5f5;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass {
+  background: rgba(15, 26, 20, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Hide scrollbar but allow scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Better touch targets on mobile */
+@media (max-width: 640px) {
+  select, input {
+    min-height: 44px;
+  }
+}
+
+/* Prevent horizontal overflow on mobile */
+html, body {
+  overflow-x: hidden;
+}
