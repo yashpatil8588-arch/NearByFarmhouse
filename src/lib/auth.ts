@@ -1,3 +1,7 @@
+if (process.env.NODE_ENV === "production") {
+  process.env.NEXTAUTH_URL = process.env.AUTH_URL || "https://www.nearbyfarmhouse.com";
+}
+
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
