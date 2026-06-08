@@ -14,8 +14,22 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  const passwordCriteria = [
+    { label: "At least 8 characters", test: (p: string) => p.length >= 8 },
+    { label: "One uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
+    { label: "One lowercase letter", test: (p: string) => /[a-z]/.test(p) },
+    { label: "One number", test: (p: string) => /[0-9]/.test(p) },
+    { label: "One special character (!@#$%^&*)", test: (p: string) => /[!@#$%^&*]/.test(p) },
+  ];
+
+  const allCriteriaMet = passwordCriteria.every((c) => c.test(password));
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!allCriteriaMet) {
+      setError("Password does not meet all criteria");
+      return;
+    }
     setError("");
     setLoading(true);
 
@@ -80,14 +94,23 @@ export default function SignupPage() {
               <label htmlFor="password" className="text-sm font-medium">Password</label>
               <div className="relative">
                 <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input id="password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} className="w-full pl-10 pr-12 py-3 border border-gray-200 dark:border-green-800 rounded-xl bg-white dark:bg-green-950 text-sm outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors" />
+                <input id="password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className="w-full pl-10 pr-12 py-3 border border-gray-200 dark:border-green-800 rounded-xl bg-white dark:bg-green-950 text-sm outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors" />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+              {password && (
+                <ul className="mt-2 space-y-1">
+                  {passwordCriteria.map((c) => (
+                    <li key={c.label} className={`text-xs flex items-center gap-1 ${c.test(password) ? "text-green-600" : "text-gray-400"}`}>
+                      {c.test(password) ? "✓" : "○"} {c.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
-            <button type="submit" disabled={loading} className="w-full py-3 bg-green-700 text-white rounded-xl font-medium hover:bg-green-800 transition-colors disabled:opacity-50">
+            <button type="submit" disabled={loading || !allCriteriaMet} className="w-full py-3 bg-green-700 text-white rounded-xl font-medium hover:bg-green-800 transition-colors disabled:opacity-50">
               {loading ? "Creating account..." : "Create account"}
             </button>
           </form>
