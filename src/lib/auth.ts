@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  secret: process.env.AUTH_SECRET || "LDQ4ZxcJOZ/LlrYJVTdZzg9Rzs2o2sgejBJ8kaTCaBo=",
   trustHost: true,
   providers: [
     Google({
