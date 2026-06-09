@@ -1,5 +1,5 @@
 if (process.env.NODE_ENV === "production") {
-  process.env.NEXTAUTH_URL = process.env.AUTH_URL || "https://www.nearbyfarmhouse.com";
+  process.env.AUTH_URL = (process.env.AUTH_URL || "https://www.nearbyfarmhouse.com").trim();
 }
 
 import NextAuth from "next-auth";
